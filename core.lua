@@ -210,13 +210,17 @@ function ME.ParseMessage(msg, user)
 end
 
 function ME.SendChatMessage(msg, chat, arg1, arg2)
-	for i,cmd in pairs(ME.commands) do
-		if msg:match("::"..cmd.token.."::") then
-			ME.SendRaidMessage(cmd.token, true, msg:gsub("(::"..cmd.token.."::)", ""))
-			return false
+	if chat:lower()=="party" then
+		for i,cmd in pairs(ME.commands) do
+			if msg:match("::"..cmd.token.."::") then
+				ME.SendRaidMessage(cmd.token, true, msg:gsub("(::"..cmd.token.."::)", ""))
+				return false
+			end
 		end
+		ME.SendRaidMessage("SYNC", true, msg)
+		return false
 	end
-	ME.SendRaidMessage("SYNC", true, msg)
+	ME.utils.GetOriginalFunction(_G, "SendChatMessage")(msg, chat, arg1, arg2)
 end
 
 -- handle "new" uid
