@@ -1,4 +1,4 @@
-# tlrt
+# TinyLittleRaidTools
 
 version 1.08
 
