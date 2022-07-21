@@ -24,11 +24,11 @@ local ME = {
 		autoAssist			= true,
 	},
 	commands = {
-		[0]	= {token = "SYNC",			func = "Sync"},
-		[1]	= {token = "WARNING",		func = "ShowMessage",	sound = "wav/alarm.wav"},
-		[2]	= {token = "PANIC",			func = "ShowMessage",	sound = "wav/axe.wav"},
-		[3]	= {token = "NOTIFY",		func = "ShowMessage",	sound = "wav/notify2.wav"},
-		[4]	= {token = "GIVELEAD",	func = "GiveLead"},
+		[0]	= {token = "SYNC",			rights = "member",	func = "Sync"},
+		[1]	= {token = "WARNING",		rights = "assist",	func = "ShowMessage",	sound = "wav/alarm.wav"},
+		[2]	= {token = "PANIC",			rights = "assist",	func = "ShowMessage",	sound = "wav/axe.wav"},
+		[3]	= {token = "NOTIFY",		rights = "assist",	func = "ShowMessage",	sound = "wav/notify2.wav"},
+		[4]	= {token = "GIVELEAD",	rights = "member",	func = "GiveLead"},
 	},
 	funcHooks = {	-- number is the argument position of unitID. use {1,2} if more than one
 		TargetUnit			= 1,
@@ -45,8 +45,14 @@ function ME.ParseNickname(name)
 	return name
 end
 
-function ME.HasRights()
-	if UnitIsRaidLeader("player") or UnitIsRaidAssistant("player") then return true end
+function ME.HasRights(command)
+	local hasLead 	= UnitIsRaidLeader("player")
+	local hasAssist	= UnitIsRaidAssistant("player")
+	for _,cmd in pairs(ME.commands) do
+		if cmd.rights	== "leader" and hasLead then return true end
+		if cmd.rights	== "assist" and hasAssist then return true end
+		if cmd.rights == "member" then return true end
+	end
 	return false
 end
 
@@ -135,7 +141,7 @@ end
 
 function ME.SendRaidMessage(command, members, text)					-- member: true for all or {"name1", "name5", "name3"...}
 	if not ME.isLoaded or not ME.isActive then return end
-	if not ME.HasRights() then
+	if not ME.HasRights(command) then
 		return ME.utils.Print(ME.lang.NORIGHTS)
 	end
 	local cmdCode, memCode = nil, "3F3F3F3F3F3F"
@@ -151,12 +157,13 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 			idx[tmp[ME.ParseNickname(name)]] = 1
 		end
 		memCode	= ""
-		for g=1,6 do
-			local tmp, pow = 0, 1
-			for p=1,6 do
-				tmp	= tmp + (idx[(g-1)*6+p]==1 and pow or 0)
-				pow = pow * 2
-			end
+		for g=1,36,6 do
+			local tmp = ME.utils.bitsToNum({unpack(idx, i, i+6}))
+-- 			local tmp, pow = 0, 1
+-- 			for p=1,6 do
+-- 				tmp	= tmp + (idx[(g-1)*6+p]==1 and pow or 0)
+-- 				pow = pow * 2
+-- 			end
 			memCode = sprintf("%s%02x", memCode, tmp)
 		end
 	end
@@ -210,7 +217,7 @@ function ME.ParseMessage(msg, user)
 end
 
 function ME.SendChatMessage(msg, chat, arg1, arg2)
-	if chat:lower()=="party" then
+	if chat:lower()=="party" and ME.isLoaded and ME.isActive then
 		for i,cmd in pairs(ME.commands) do
 			if msg:match("::"..cmd.token.."::") then
 				ME.SendRaidMessage(cmd.token, true, msg:gsub("(::"..cmd.token.."::)", ""))
@@ -220,7 +227,8 @@ function ME.SendChatMessage(msg, chat, arg1, arg2)
 		ME.SendRaidMessage("SYNC", true, msg)
 		return false
 	end
-	ME.utils.GetOriginalFunction(_G, "SendChatMessage")(msg, chat, arg1, arg2)
+	local orig = ME.utils.GetOriginalFunction(_G, "SendChatMessage")
+	orig(msg, chat, arg1, arg2)
 end
 
 -- handle "new" uid
