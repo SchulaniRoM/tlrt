@@ -121,7 +121,7 @@ end
 function ME.bitsToNum(tbl)
 	local num, pow = 0, 1
 	for i = 1, #tbl do
-		num = num + tbl[i] * pow
+		num = num + (tbl[i] or 0) * pow
 		pow = pow * 2
 	end
 	return num

@@ -20,7 +20,6 @@ local ME = {
 	defaults = {
 		enabled					= true,
 		useSound				= true,
-		autoRaid				= true,
 		autoAssist			= true,
 	},
 	commands = {
@@ -39,6 +38,9 @@ local ME = {
 	lastLeader			= nil,
 }
 _G.TLRT = ME
+
+local C_RED			= "|cffff00ff"
+local C_GREEN		= "|cff00ff00"
 
 function ME.ParseNickname(name)
 	name = name:lower():gsub("^%l", string.upper)
@@ -75,48 +77,65 @@ function ME.GetPartyMemberInfo(uid, index)
 end
 
 function ME.GiveLead(uid)
-	if UnitIsRaidLeader(UnitName("player")) then
+	if UnitIsRaidLeader("player") then
 		PromoteToPartyLeader(uid)
+		return true
 	end
+	return false
 end
 
 function ME.CheckLeader()
 	-- TODO think about ist
 end
 
+function ME.CheckAssist()
+	if not UnitIsRaidLeader("player") or not ME.settings.autoAssist then return end
+	ME.utils.Debug(ME.addonShortName, "CheckAssist")
+	for uid,member in pairs(ME.members) do
+		ME.utils.Debug(ME.addonShortName, name, "assist", member.isAssist)
+		if name~=UnitName("player") and not member.isAssist and not member.isLead then
+			ME.utils.Print(ME.addonName, "gives assist to", member.name)
+			SwithRaidAssistant(member.index, true)	-- misspelling correct
+		end
+	end
+end
+
 function ME.UpdateParty(event, ...)
-	ME.utils.Debug(event, ...)
+	local t,a,l,c 	= 0,0,0,0
 	local tbl, i = {}
 	if GetNumRaidMembers()+GetNumPartyMembers()>0 then
 		if GetNumRaidMembers()==0 then return SwitchToRaid() end
 		for i=1,36 do
 			tbl["raid"..i]	= ME.GetPartyMemberInfo("raid"..i, i)
 		end
-		local t,a,l 	= 1,1,1
 		ME.members	= {}
 		for uid, member in pairs(tbl) do
 			ME.members[uid]	= member
-			if member.isAssist	then ME.members["assist"..l]	= member	l = l + 1 end
-			if member.isAttack	then ME.members["attack"..a]	= member	a = a + 1 end
-			if member.isTank		then ME.members["tank"..t] 		= member	t = t + 1 end
+			if member.isAssist	then l = l + 1	ME.members["assist"..l]	= member end
+			if member.isAttack	then a = a + 1	ME.members["attack"..a]	= member end
+			if member.isTank		then t = t + 1	ME.members["tank"..t] 	= member end
+			c = c + 1
 		end
-		ME.utils.Debug(ME.addonShortname, "UpdateParty", ME.utils.tableSize(tbl))
+		ME.utils.Debug(ME.addonShortname, "UpdateParty", c, t, a, l)
 	else
 		ME.members		= {}
 	end
 	ME.Activate(ME.utils.tableSize(tbl))
-	ME.CheckLeader()
+	if ME.isActive then
+		ME.CheckLeader()
+		if (l<c) then ME.CheckAssist() end
+	end
 end
 
 function ME.Activate(state)
-	local state = ME.utils.toboolean(state)
+	local state = ME.settings.enabled and ME.utils.toboolean(state)
 	if state~=ME.isActive then
 		ME.taskList	= {}
 		ME.isActive = state
 		if ME.isActive then
-			ME.utils.Print(ME.addonName, ME.lang.ACTIVATED)
+			ME.utils.Print(ME.addonName, C_GREEN..ME.lang.ON.."|r")
 		else
-			ME.utils.Print(ME.addonName, ME.lang.DEACTIVATED)
+			ME.utils.Print(ME.addonName, C_RED..ME.lang.OFF.."|r")
 		end
 	end
 end
@@ -156,15 +175,13 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 		for _,name in pairs(members) do
 			idx[tmp[ME.ParseNickname(name)]] = 1
 		end
-		memCode	= ""
-		for g=1,36,6 do
-			local tmp = ME.utils.bitsToNum({unpack(idx, i, i+6}))
--- 			local tmp, pow = 0, 1
--- 			for p=1,6 do
--- 				tmp	= tmp + (idx[(g-1)*6+p]==1 and pow or 0)
--- 				pow = pow * 2
--- 			end
-			memCode = sprintf("%s%02x", memCode, tmp)
+		memCode,c,p	= "",0,1
+		for m=1,36 do
+			c	= c + (idx[m]==1 and p or 0)
+			p	= p * 2
+			if p==64 then
+				memCode,c,p = sprintf("%s%02x", memCode, c),0,1
+			end
 		end
 	end
 	local msg = sprintf("|H%s:%s%s|h|h%s", ME.addonShortname, cmdCode, memCode, text or "")
@@ -174,7 +191,7 @@ end
 
 function ME.ShowMessage(command, members, user, data, text)
 	if ME.utils.inTable(members,UnitName("player")) then
-		if command.sound then
+		if command.sound and ME.settings.useSound then
 			PlaySoundByPath(sprintf("%s/%s", ME.addonPath, command.sound))
 		end
 		if command.token=="WARNING" then SendWarningMsg(text) end
@@ -189,6 +206,7 @@ function ME.ParseMessage(msg, user)
 		local _,user,_	= ParseHyperlink(user)
 		if cmd then					-- its a tlrt message
 			if cmd=="00" then	-- its a tlrt sync (any non command) message
+				ME.utils.Debug(ME.addonShortname, "SYNC", user)
 				ME.players[user].hasTLRT = true
 			elseif ME.commands[tonumber(cmd,16)] then	-- its a known command
 				local g1, g2, g3, g4, g5, g6, info = data:match("(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)(%w*)")
@@ -207,7 +225,7 @@ function ME.ParseMessage(msg, user)
 					end
 				end
 				ME.utils.Debug(ME.addonShortname, "members", ME.utils.join(members, ","))
-				if cmd.func and ME[cmd.func] then
+				if cmd.func and ME[cmd.func] and ME.isLoaded and ME.isActive then
 					local success, errMsg = pcall(ME[cmd.func], cmd, members, user, data, text)
 					assert(success, errMsg)
 				end
@@ -286,9 +304,12 @@ function ME.VARIABLES_LOADED(...)
 	ME.lang = dofile(file)
 	-- merge settings
 	SaveVariablesPerCharacter(ME.profileName)
-	ME.settings	= ME.defaults
-	for k,v in pairs(_G[ME.profileName] or {}) do
-		if ME.settings[k]~=nil then
+	local tmp = _G[ME.profileName] or {}
+	ME.settings = {}
+	for k,v in pairs(ME.defaults) do
+		if tmp[k]~=nil then
+			ME.settings[k] = tmp[k]
+		else
 			ME.settings[k] = v
 		end
 	end
@@ -321,12 +342,48 @@ function ME.OnEvent(event, frame, ...)
 	end
 end
 
+-- change settings
+
+function ME.SetSettings(key, val)
+	if not val or val=="" then ME.settings[key] = not ME.settings[key]
+	elseif val==true or val=="on" or val=="true" then ME.settings[key] = true
+	elseif val==false or val=="off" or val=="false" then ME.settings[key] = false
+	end
+	if key=="enabled" and ME.settings.enabled~=ME.isActive then
+		return ME.Activate(ME.settings.enabled)
+	end
+	ME.showSettings(key)
+	if key=="autoAssist" and ME.settings.autoAssist then
+		ME.CheckAssist()
+	end
+end
+
+function ME.showSettings(key)
+	local output = {enabled = ME.addonName, useSound = "Sound", autoAssist = "AutoAssist"}
+	if output[key] then
+		if ME.settings[key] then
+			ME.utils.Print(output[key], C_GREEN..ME.lang.ON.."|r")
+		else
+			ME.utils.Print(output[key], C_RED..ME.lang.OFF.."|r")
+		end
+	end
+end
+
 -- slash command handler
 
-function _G.SlashCmdList.ME(editBox, cmd)
-	-- TODO
-	-- aktivieren/deaktivieren
-	-- sound an/aus
+function _G.SlashCmdList.TLRT(editBox, msg)
+	cmd = msg:lower():match("(%w*)")
+	prm = msg:lower():match(" (%w*)")
+	ME.utils.Debug(cmd, prm)
+	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", prm)
+	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", prm)
+	elseif cmd=="on" or cmd=="true" or cmd=="off" or cmd=="false" then	return ME.SetSettings("enabled", cmd)
+	end
+	ME.showSettings("enabled")
+	if ME.settings.enabled then
+		ME.showSettings("useSound")
+		ME.showSettings("autoAssist")
+	end
 end
 _G.SLASH_TLRT1 = "/tlrt"
 _G.SLASH_TLRT2 = "/TLRT"
