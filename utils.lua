@@ -137,15 +137,6 @@ function ME.bitwiseAND(a, b)
 	return ME.bitsToNum(tbl)
 end
 
-function ME.GetDebugFrame()
-	for n=1,10 do
-		if GetChatWindowInfo(n):lower()=="debug" then
-			return getglobal("ChatFrame"..n)
-		end
-	end
-	return DEFAULT_CHAT_FRAME
-end
-
 function ME.Hook(funcRoot, funcName, newFunc)
 	if funcRoot[funcName] then
 		funcRoot.TLRTHookedFunctions = funcRoot.TLRTHookedFunctions or {}
@@ -167,20 +158,9 @@ function ME.Print(...)
 	DEFAULT_CHAT_FRAME:AddMessage(txt, .9, .3, .9)
 end
 
-function ME.Debug(...)
-	local txt, chatFrame, k = Arglist(false,...), DEFAULT_CHAT_FRAME
-	for k=1,10 do if GetChatWindowInfo(k):lower()=="debug" then chatFrame = getglobal("ChatFrame"..k) break end end
-	chatFrame:AddMessage(txt, .9, .9, .3)
-end
-
 function ME.Error(str, ...)
 	str = select("#",...)>0 and tostring(str):format(...) or tostring(str)
 	DEFAULT_CHAT_FRAME:AddMessage(str, .9, .3, .3)
-	for k=1,10 do
-		if GetChatWindowInfo(k):lower()=="debug" then
-			getglobal("ChatFrame"..k):AddMessage(str, .9, .3, .3)
-		end
-	end
 end
 
 function ME.Format(text, object)
