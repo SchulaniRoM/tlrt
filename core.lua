@@ -11,7 +11,7 @@ local ME = {
 	addonName				= "TinyLittleRaidTools",
 	addonShortName	= "TLRT",
 	addonAuthor			= "Celesteria@Kerub",
-	addonVersion		= 1.08,
+	addonVersion		= 1.09,
 	addonPath				= "Interface/Addons/tlrt",
 	profileName			= "tlrt_settings",
 	isActive				= false,
@@ -257,7 +257,7 @@ end
 -- handle "new" uid
 
 function ME.UnitID(uid)
-	if type(uid)=="string" and ME.isLoaded and ME.isActive then
+	if type(uid)=="string" and uid~="" and ME.isLoaded and ME.isActive then
 		local id		= uid:lower()
 		local list	= ME.FilterMemberList("uid", "uid")
 		uid = uid:gsub("^(atta?c?k?e?r?)", "attack"):gsub("^assista?n?t?", "assist"):gsub("^leade?r?", "lead")
