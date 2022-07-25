@@ -15,7 +15,6 @@ local ME 		= {
 	on_stop			= "::SYSTEM::ReadyCheck abgebrochen oder abgelaufen.",
 	on_cancel		= "ReadyCheck beendet. Starte CountDown.",
 	on_event		= nil,	-- function below
-	members			= nil,	-- function below
 	-- variables
 	name				= "readycheck",	-- required
 	duration		= 30,	-- required
