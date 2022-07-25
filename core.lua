@@ -434,7 +434,7 @@ function ME.RegisterEvent(module, events)
 		events = {events}
 	end
 	local name = type(module)=="string" and module or module.name
-	for _,event in pairs(events) do
+	for _,event in pairs(events or {}) do
 		if not ME.eventList[event] then
 			ME.EventFrame():RegisterEvent(event)
 		end
@@ -449,7 +449,7 @@ function ME.UnregisterEvent(module, events)
 		events = {events}
 	end
 	local name = type(module)=="string" and module or module.name
-	for _,event in pairs(events) do
+	for _,event in pairs(events or {}) do
 		if ME.eventList[event] and ME.eventList[event][name] then
 			ME.eventList[event][name]	= nil
 		end
@@ -490,6 +490,7 @@ end
 
 function ME.StartTask(obj)
 	obj.remaining	= obj.duration
+	obj.timer			= obj.reverse==true and obj.duration or 0
 	obj.running 	= true
 	ME.taskList 	= ME.taskList or {}
 	ME.RegisterEvent(obj, obj.events)
@@ -516,8 +517,8 @@ function ME.UpdateTask(obj, typ)
 	local msg
 	if typ and typ~="update" then
 		msg = ME.utils.VarFunc(obj["on_"..typ])
-	elseif obj[obj.time] then
-		msg = ME.utils.VarFunc(obj[obj.time])
+	elseif obj[obj.timer] then
+		msg = ME.utils.VarFunc(obj[obj.timer])
 	else
 		msg = ME.utils.VarFunc(obj["on_update"])
 	end
