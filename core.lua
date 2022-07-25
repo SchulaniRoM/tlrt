@@ -505,10 +505,10 @@ function ME.StopTask(obj)
 	ME.taskList[obj.name] = nil
 end
 
-function ME.FinishTask(obj)
+function ME.CancelTask(obj)
 	obj.running = false
 	ME.UnregisterEvent(obj, obj.events)
-	ME.UpdateTask(obj, "finish")
+	ME.UpdateTask(obj, "cancel")
 	ME.taskList[obj.name] = nil
 end
 
@@ -536,11 +536,22 @@ function _G.SlashCmdList.TLRT(editBox, msg)
 	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", arg1)
 	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", arg1)
 	elseif cmd=="on" or cmd=="true" or cmd=="off" or cmd=="false" then	return ME.SetSettings("enabled", cmd)
+	elseif cmd=="unload" then
+		if ME.modules[arg1] then
+			ME.modules[arg1] = nil
+		end
 	elseif not cmd or cmd=="" then
 		ME.ShowSettings("enabled")
 		if ME.settings.enabled then
 			ME.ShowSettings("useSound")
 			ME.ShowSettings("autoAssist")
+			local mods = ""
+			for name,module in pairs(ME.modules or {}) do
+				mods = sprintf("%s%s%s", mods, #mods>0 and ", " or "", name)
+			end
+			if #mods>0 then
+				ME.utils.Print(ME.lang.LOADED_MODULES, C_GREEN..mods.."|r")
+			end
 		end
 		return
 	else

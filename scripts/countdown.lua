@@ -14,12 +14,13 @@ local ME 		= {
 	on_update	= "::BEEP::<<timer>>s",
 	[10]			= nil,	-- function below
 	[8]				= "::BEEP::<<timer>>s - MUSIK starten !",
-	[2]				= "::WARNING::|H|h|cffFF0000TANK|r|h GOGOGO !!!",
-	on_stop		= "::WARNING::|H|h|cff00FF00PARTY|r|h GOGOGO !!!",
+	[2]				= "::WARNING::<<timer>>s - |H|h|cffFF0000TANK|r|h GOGOGO !!!",
+	on_stop		= "::WARNING::<<timer>>s - |H|h|cff00FF00PARTY|r|h GOGOGO !!!",
+	on_cancel	= "CountDown abgebrochen...",
 	-- variables
 	name			= "countdown",	-- required
 	reverse		= true,	-- running down
-	duration	= 25,	-- required
+	duration	= 15,	-- required
 	interval	= 5,
 	members		= true,	-- will be set later
 }
@@ -67,12 +68,13 @@ function ME.Command(cmd, arg1, arg2, arg3)
 		TLRT.StartTask(ME)
 
 	elseif cmd=="stop" or cmd=="cancel" then 	-- /tlrt countdown stop
-		TLRT.StopTask(ME)
+		if ME.running then TLRT.CancelTask(ME) end
 
 	end
 end
 
 function ME.Init()
+	-- nothing to do here
 end
 
 return ME

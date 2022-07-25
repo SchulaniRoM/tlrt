@@ -13,7 +13,7 @@ local ME 		= {
 	on_start		= "::NOTIFY::ReadyCheck wurde gestartet. Bitte bestätigt eure Anwesenheit mit einem + im Gruppenchat. Sobald alle bereit sind, kommt der Countdown!",
 	on_update		= "::SYSTEM::ReadyCheck läuft seit <<timer>>s, folgende Spieler sind noch nicht bereit: <<members_string>>",
 	on_stop			= "::SYSTEM::ReadyCheck abgebrochen oder abgelaufen.",
-	on_finish		= "ReadyCheck beendet. Starte CountDown.",
+	on_cancel		= "ReadyCheck beendet. Starte CountDown.",
 	on_event		= nil,	-- function below
 	members			= nil,	-- function below
 	-- variables
@@ -62,7 +62,7 @@ function ME.on_event(event, msg, user)
 				readyList[name] = true
 			end
 			if ME.members_string()=="" then
-				TLRT.FinishTask(ME)
+				TLRT.CancelTask(ME)
 			end
 
 		elseif msg=="---" then
@@ -71,7 +71,7 @@ function ME.on_event(event, msg, user)
 	elseif event=="PARTY_MEMBER_CHANGED" then
 		-- when moving member out of includeList
 		if ME.members_string()=="" then
-			TLRT.FinishTask(ME)
+			TLRT.CancelTask(ME)
 		end
 	end
 end
@@ -89,8 +89,11 @@ function ME.Command(cmd, arg1, arg2, arg3)
 		readyList = {}
 		TLRT.StartTask(ME)
 
-	elseif cmd=="stop" or cmd=="cancel" then 	-- /tlrt readycheck stop
-		TLRT.StopTask(ME)
+	elseif cmd=="stop" then 	-- /tlrt readycheck stop
+		if ME.running then TLRT.StopTask(ME) end
+
+	elseif cmd=="cancel" then 	-- /tlrt readycheck cancel
+		if ME.running then TLRT.CancelTask(ME) end
 
 	elseif cmd=="ignore" and arg2=="add" then 	-- /tlrt readycheck ignore add ignoredUser
 		if type(arg3)=="string" then ignoreList[TLRT.ParseNickname(arg3)] = true end
