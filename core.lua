@@ -538,7 +538,12 @@ function _G.SlashCmdList.TLRT(editBox, msg)
 	elseif cmd=="on" or cmd=="true" or cmd=="off" or cmd=="false" then	return ME.SetSettings("enabled", cmd)
 	elseif cmd=="unload" then
 		if ME.modules[arg1] then
-			ME.modules[arg1] = nil
+			if ME.modules[arg1].running then
+				ME.utils.Print("module", arg1, "is still running")
+			else
+				ME.modules[arg1] = nil
+				ME.utils.Print("module", arg1, "unloaded")
+			end
 		end
 	elseif not cmd or cmd=="" then
 		ME.ShowSettings("enabled")
