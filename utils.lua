@@ -137,6 +137,17 @@ function ME.bitwiseAND(a, b)
 	return ME.bitsToNum(tbl)
 end
 
+function ME.VarFunc(object, ...)
+	if object then
+		if type(object)=="function" then
+			return object(...)
+		else
+			return object
+		end
+	end
+	return nil
+end
+
 function ME.Hook(funcRoot, funcName, newFunc)
 	if funcRoot[funcName] then
 		funcRoot.TLRTHookedFunctions = funcRoot.TLRTHookedFunctions or {}
@@ -166,7 +177,13 @@ end
 function ME.Format(text, object)
 	if text and type(text)=="string" and text~="" then
 		for k,v in pairs(object or {}) do
-			text = text:gsub("<<"..tostring(k)..">>", type(v)=="number" and MoneyNormalization(v) or tostring(v))
+			if text:find("<<"..tostring(k)..">>") then
+				if type(v)=="function" then
+					text = text:gsub("<<"..tostring(k)..">>", tostring(v()))
+				else
+					text = text:gsub("<<"..tostring(k)..">>", type(v)=="number" and MoneyNormalization(v) or tostring(v))
+				end
+			end
 		end
 	end
 	return text

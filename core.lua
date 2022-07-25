@@ -11,8 +11,9 @@ local ME = {
 	addonName				= "TinyLittleRaidTools",
 	addonShortName	= "TLRT",
 	addonAuthor			= "Celesteria@Kerub",
-	addonVersion		= 1.09,
+	addonVersion		= 1.011,
 	addonPath				= "Interface/Addons/tlrt",
+	addonURL				= "https://github.com/SchulaniRoM/tlrt",
 	profileName			= "tlrt_settings",
 	isActive				= false,
 	-- default settings
@@ -23,10 +24,12 @@ local ME = {
 	},
 	commands = {
 		[0]	= {token = "SYNC",			rights = "member",	func = "Sync"},
-		[1]	= {token = "WARNING",		rights = "assist",	func = "ShowMessage",	sound = "wav/alarm.wav"},
-		[2]	= {token = "PANIC",			rights = "assist",	func = "ShowMessage",	sound = "wav/axe.wav"},
-		[3]	= {token = "NOTIFY",		rights = "assist",	func = "ShowMessage",	sound = "wav/notify2.wav"},
-		[4]	= {token = "GIVELEAD",	rights = "member",	func = "GiveLead"},
+		[1]	= {token = "WARNING",		rights = "assist",	func = "ShowMessage",	sound = "snd/alarm.wav"},
+		[2]	= {token = "PANIC",			rights = "assist",	func = "ShowMessage",		sound = "snd/axe.wav"},
+		[3]	= {token = "NOTIFY",		rights = "assist",	func = "ShowMessage",			sound = "snd/notify2.wav"},
+		[4]	= {token = "BEEP",			rights = "assist",	func = "ShowMessage",			sound = "snd/beep.wav"},
+		[5]	= {token = "SYSTEM",		rights = "assist",	func = "ShowMessage"},
+		[9]	= {token = "GIVELEAD",	rights = "member",	func = "GiveLead"},
 	},
 	funcHooks = {	-- number is the argument position of unitID. use {1,2} if more than one
 		TargetUnit			= 1,
@@ -34,6 +37,7 @@ local ME = {
 		FocusUnit				= 1,
 		CastSpellByName = 2,
 	},
+	eventList				= {},
 	lastLeader			= nil,
 }
 _G.TLRT = ME
@@ -78,9 +82,44 @@ function ME.GetPartyMemberInfo(uid, index)
 	return nil
 end
 
-function ME.GiveLead(uid)
+function ME.GetPartyMember(uidOrNameOrIndex, field)
+	local found
+	if type(uidOrNameOrIndex)=="string" then
+		uidOrNameOrIndex = uidOrNameOrIndex:lower()
+		if ME.members[uidOrNameOrIndex] then
+			found = ME.members[uidOrNameOrIndex].uid
+		else
+			uidOrNameOrIndex = ME.ParseNickname(uidOrNameOrIndex)
+			for uid,member in pairs(ME.members) do
+				if member.name==uidOrNameOrIndex then
+					found = uidOrNameOrIndex
+					break
+				end
+			end
+		end
+	elseif type(uidOrNameOrIndex)=="number" then
+		for uid,member in pairs(ME.members) do
+			if member.index==uidOrNameOrIndex then
+				found = uid
+				break
+			end
+		end
+	end
+	if found then
+		if field then
+			return ME.members[found][field] or nil
+		else
+			return ME.members[found] or nil
+		end
+	else
+		return nil
+	end
+end
+
+function ME.GiveLead(_, _, user)
 	if UnitIsRaidLeader("player") then
-		PromoteToPartyLeader(uid)
+		local list = ME.FilterMemberList("name", "uid")
+		PromoteToPartyLeader(list[user].uid)
 		return true
 	end
 	return false
@@ -94,7 +133,7 @@ function ME.CheckAssist()
 	if not UnitIsRaidLeader("player") or not ME.settings.autoAssist then return end
 	if debug then DEBUG(ME.addonShortName, "CheckAssist") end
 	for uid,member in pairs(ME.members) do
-		if name~=UnitName("player") and not member.isAssist and not member.isLead then
+		if name~=UnitName("player") and not member.isAssist and not member.isLead and member.online then
 			ME.utils.Print(ME.addonName, "gives assist to", member.name)
 			SwithRaidAssistant(member.index, true)	-- misspelling correct
 		end
@@ -168,7 +207,9 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 		end
 	end
 	assert(cmdCode, "invalid command code")
-	if members~=true then
+	if cmdCode=="00" then	-- SYNC
+		memCode	= ("%x"):format(ME.addonVersion * 1000)
+	elseif members~=true then
 		if type(members)~="table" then members = {members} end
 		local idx, tmp1, tmp2 = ME.FilterMemberList("index", 0), ME.FilterMemberList("name", "index"), ME.FilterMemberList("uid", "index")
 		for _,name in pairs(members) do
@@ -176,8 +217,6 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 				idx[tmp1[ME.ParseNickname(name)]] = 1
 			elseif tmp2[name:lower()]~=nil then
 				idx[tmp2[name:lower()]] = 1
-			else
-				if debug then DEBUG(ME.addonShortName, "SendRaidMessage", "unknown user or uid", name) end
 			end
 		end
 		memCode,c,p	= "",0,1
@@ -190,7 +229,7 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 		end
 	end
 	local msg = sprintf("|H%s:%s%s|h|h%s", ME.addonShortName, cmdCode, memCode, text or "")
-	if debug then DEBUG(ME.addonShortName, "SendRaidMessage", msg:sub(2)) end
+	if debug then DEBUG(ME.addonShortName, "SendRaidMessage", command, msg:sub(2)) end
 	ME.utils.GetOriginalFunction(_G, "SendChatMessage")(msg, "party")
 end
 
@@ -205,14 +244,19 @@ function ME.ShowMessage(command, members, user, data, text)
 end
 
 function ME.ParseMessage(msg, user)
-	if not ME.isLoaded or not ME.isActive or not msg or not user then return end
+	if not ME.isLoaded or not ME.isActive or not msg or not user then return msg end
 	if msg:match("|H"..ME.addonShortName..":%w+|h|h") then
-		local cmd, data	= msg:match("|H"..ME.addonShortName..":(%x%x)(%w*)|h|h")
+		local cmd, data, rest	= msg:match("|H"..ME.addonShortName..":(%x%x)(%w*)|h|h(.*)$")
 		local _,user,_	= ParseHyperlink(user)
 		if cmd then					-- its a tlrt message
 			if cmd=="00" then	-- its a tlrt sync (any non command) message
-				if debug then DEBUG(ME.addonShortName, "SYNC", user) end
+				local version = data and tonumber(data, 16)/1000 or 0
+				if debug then DEBUG(ME.addonShortName, "SYNC", user, data, MoneyNormalization(version*1000), rest) end
 				ME.players[user].hasTLRT = true
+				if version>ME.addonVersion and not ME.newVersionReported then
+					ME.utils.Print(ME.addonName, "newer version", MoneyNormalization(version*1000), "available.\ndownload at", ME.addonURL)
+					ME.newVersionReported = true
+				end
 			elseif ME.commands[tonumber(cmd,16)] then	-- its a known command
 				local g1, g2, g3, g4, g5, g6, info = data:match("(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)(%w*)")
 				local text = msg:gsub("|H"..ME.addonShortName..":"..cmd..g1..g2..g3..g4..g5..g6..data.."|h|h", "")
@@ -236,18 +280,26 @@ function ME.ParseMessage(msg, user)
 				end
 			end
 		end
+		return rest
 	end
+	return msg
+end
+
+function ME.ParseSendMessage(text)
+	local cmd
+	for _,cmd in pairs(ME.commands) do
+		if text:match("::"..cmd.token.."::") then
+			text = text:gsub("(::"..cmd.token.."::)", "")
+			return text, cmd.token
+		end
+	end
+	return text, "SYNC"
 end
 
 function ME.SendChatMessage(msg, chat, arg1, arg2)
 	if chat:lower()=="party" and ME.isLoaded and ME.isActive then
-		for i,cmd in pairs(ME.commands) do
-			if msg:match("::"..cmd.token.."::") then
-				ME.SendRaidMessage(cmd.token, true, msg:gsub("(::"..cmd.token.."::)", ""))
-				return false
-			end
-		end
-		ME.SendRaidMessage("SYNC", true, msg)
+		local text, cmd = ME.ParseSendMessage(msg)
+		ME.SendRaidMessage(cmd, true, text)
 		return false
 	end
 	local orig = ME.utils.GetOriginalFunction(_G, "SendChatMessage")
@@ -324,11 +376,11 @@ function ME.VARIABLES_LOADED(...)
 		end
 	end
 	-- register events
-	ME.EventFrame():RegisterEvent("LOADING_END")
-	ME.EventFrame():RegisterEvent("SAVE_VARIABLES")
-	ME.EventFrame():RegisterEvent("CHAT_MSG_PARTY")
-	ME.EventFrame():RegisterEvent("PARTY_MEMBER_CHANGED")
-	ME.EventFrame():RegisterEvent("PARTY_LEADER_CHANGED")
+	ME.RegisterEvent(ME.addonShortName, "LOADING_END")
+	ME.RegisterEvent(ME.addonShortName, "SAVE_VARIABLES")
+	ME.RegisterEvent(ME.addonShortName, "CHAT_MSG_PARTY")
+	ME.RegisterEvent(ME.addonShortName, "PARTY_MEMBER_CHANGED")
+	ME.RegisterEvent(ME.addonShortName, "PARTY_LEADER_CHANGED")
 	-- hook functions
 	ME.utils.Hook(_G, "SendChatMessage", ME.SendChatMessage)
 	_G.SendRaidMessage	= ME.SendRaidMessage
@@ -339,6 +391,18 @@ function ME.VARIABLES_LOADED(...)
 end
 
 function ME.ONUPDATE(elapsedTime)
+	if not ME.taskList then return end
+	ME.taskTick = (ME.taskTick or 1) - elapsedTime
+	if ME.taskTick>0 then return else ME.taskTick = ME.taskTick + 1 end
+	for name, object in pairs(ME.taskList) do
+		object.remaining = object.remaining - 1
+		object.timer		 = object.reverse==true and object.remaining or (object.duration - object.remaining)
+		if object.remaining<=0 then
+			ME.StopTask(object, "stop")
+		elseif not object.interval or (object.timer % object.interval)==0 then
+			ME.UpdateTask(object, "update")
+		end
+	end
 end
 
 function ME.OnEvent(event, frame, ...)
@@ -346,9 +410,52 @@ function ME.OnEvent(event, frame, ...)
 		local success, errMsg = pcall(ME[event], ...)
 		assert(success, errMsg)
 	elseif ME.isLoaded then
-		if event=="CHAT_MSG_PARTY" 			then ME.ParseMessage(...)
-		elseif event=="SAVE_VARIABLES" 	then _G[ME.profileName] = ME.settings or {}
-		else ME.UpdateParty(event, ...) end
+		local args = {...}
+		if event=="CHAT_MSG_PARTY" then
+			args[1] = ME.ParseMessage(...)
+		elseif event=="SAVE_VARIABLES" 	then
+			_G[ME.profileName] = ME.settings or {}
+		else
+			ME.UpdateParty(event, ...)
+		end
+		if ME.eventList and ME.eventList[event] then
+			for _,module in pairs(ME.eventList[event]) do
+				if type(module)=="table" and type(module.on_event)=="function" then
+					module.on_event(event, unpack(args))
+				end
+			end
+		end
+	end
+end
+
+function ME.RegisterEvent(module, events)
+	ME.eventList	= ME.eventList or {}
+	if type(events)=="string" then
+		events = {events}
+	end
+	local name = type(module)=="string" and module or module.name
+	for _,event in pairs(events) do
+		if not ME.eventList[event] then
+			ME.EventFrame():RegisterEvent(event)
+		end
+		ME.eventList[event]				= ME.eventList[event] or {}
+		ME.eventList[event][name]	= module
+	end
+end
+
+function ME.UnregisterEvent(module, events)
+	ME.eventList	= ME.eventList or {}
+	if type(events)=="string" then
+		events = {events}
+	end
+	local name = type(module)=="string" and module or module.name
+	for _,event in pairs(events) do
+		if ME.eventList[event] and ME.eventList[event][name] then
+			ME.eventList[event][name]	= nil
+		end
+		if ME.utils.tableSize(ME.eventList[event])==0 then
+			ME.EventFrame():UnregisterEvent(event)
+		end
 	end
 end
 
@@ -362,13 +469,13 @@ function ME.SetSettings(key, val)
 	if key=="enabled" and ME.settings.enabled~=ME.isActive then
 		return ME.Activate(ME.settings.enabled)
 	end
-	ME.showSettings(key)
+	ME.ShowSettings(key)
 	if key=="autoAssist" and ME.settings.autoAssist then
 		ME.CheckAssist()
 	end
 end
 
-function ME.showSettings(key)
+function ME.ShowSettings(key)
 	local output = {enabled = ME.addonName, useSound = "Sound", autoAssist = "AutoAssist"}
 	if output[key] then
 		if ME.settings[key] then
@@ -379,20 +486,76 @@ function ME.showSettings(key)
 	end
 end
 
+-- external tasks
+
+function ME.StartTask(obj)
+	obj.remaining	= obj.duration
+	obj.running 	= true
+	ME.taskList 	= ME.taskList or {}
+	ME.RegisterEvent(obj, obj.events)
+	ME.UpdateTask(obj, "start")
+	ME.taskList[obj.name] = obj
+end
+
+function ME.StopTask(obj)
+	obj.running = false
+	ME.UnregisterEvent(obj, obj.events)
+	ME.UpdateTask(obj, "stop")
+	ME.taskList[obj.name] = nil
+end
+
+function ME.FinishTask(obj)
+	obj.running = false
+	ME.UnregisterEvent(obj, obj.events)
+	ME.UpdateTask(obj, "finish")
+	ME.taskList[obj.name] = nil
+end
+
+function ME.UpdateTask(obj, typ)
+	if debug then DEBUG(ME.addonShortName, typ, "task", obj.name, DEBUG.ListTable(ME.utils.VarFunc(obj.members))) end
+	local msg
+	if typ and typ~="update" then
+		msg = ME.utils.VarFunc(obj["on_"..typ])
+	elseif obj[obj.time] then
+		msg = ME.utils.VarFunc(obj[obj.time])
+	else
+		msg = ME.utils.VarFunc(obj["on_update"])
+	end
+	if msg and msg~="" and msg~=false then
+		local text, cmd = ME.ParseSendMessage(ME.utils.Format(msg, obj))
+		ME.SendRaidMessage(cmd, ME.utils.VarFunc(obj.members), text)
+	end
+end
+
 -- slash command handler
 
 function _G.SlashCmdList.TLRT(editBox, msg)
-	cmd = msg:lower():match("(%w*)")
-	prm = msg:lower():match(" (%w*)")
-	if debug then DEBUG(ME.addonShortName, cmd, prm) end
-	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", prm)
-	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", prm)
+	local cmd, arg1, arg2, arg3 = unpack(ME.utils.split(msg, " "))
+-- 	if debug then DEBUG(ME.addonShortName, cmd, arg1, arg2, arg3) end
+	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", arg1)
+	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", arg1)
 	elseif cmd=="on" or cmd=="true" or cmd=="off" or cmd=="false" then	return ME.SetSettings("enabled", cmd)
-	end
-	ME.showSettings("enabled")
-	if ME.settings.enabled then
-		ME.showSettings("useSound")
-		ME.showSettings("autoAssist")
+	elseif not cmd or cmd=="" then
+		ME.ShowSettings("enabled")
+		if ME.settings.enabled then
+			ME.ShowSettings("useSound")
+			ME.ShowSettings("autoAssist")
+		end
+		return
+	else
+		ME.modules = ME.modules or {}
+		if not ME.modules[cmd] then
+			local file = sprintf("%s/scripts/%s.lua", ME.addonPath, cmd)
+			local success, errMsg	= pcall(loadfile, file)
+			if success then
+				if debug then DEBUG(ME.addonShortName, "loading module", cmd) end
+				ME.modules[cmd] = dofile(file)
+				if ME.modules[cmd].Init then ME.modules[cmd].Init() end
+			end
+		end
+		if ME.modules[cmd] and ME.modules[cmd].Command then
+			return ME.modules[cmd].Command(arg1, arg2, arg3)
+		end
 	end
 end
 _G.SLASH_TLRT1 = "/tlrt"
