@@ -166,7 +166,7 @@ function ME.UpdateParty(event, ...)
 end
 
 function ME.Activate(state)
-	local state = ME.settings.enabled and ME.utils.toboolean(state)
+	local state = ME.settings.enabled and ME.utils.toboolean(state) and GetZoneID()~=448
 	if state~=ME.isActive then
 		ME.isActive = state
 		if ME.isActive then
@@ -327,8 +327,9 @@ function ME.HookUidFunctions()
 		ME.utils.Hook(_G, func, function(...)
 			local args, argPos = {...}, type(argPos)=="number" and {argPos} or argPos
 			for _,pos in pairs(argPos) do
-				if debug then DEBUG(ME.addonShortName, func, args[pos], "-->", ME.UnitID(args[pos])) end
-				args[pos]	= ME.UnitID(args[pos])
+				local newID = ME.UnitID(args[pos])
+				if debug and newID~=args[pos] then DEBUG(ME.addonShortName, func, args[pos], "-->", newID) end
+				args[pos]	= newID
 			end
 			ME.utils.GetOriginalFunction(_G, func)(unpack(args))
 		end)
@@ -531,7 +532,8 @@ end
 -- slash command handler
 
 function _G.SlashCmdList.TLRT(editBox, msg)
-	local cmd, arg1, arg2, arg3 = unpack(ME.utils.split(msg, " "))
+-- 	local cmd, arg1, arg2, arg3 = unpack(ME.utils.split(msg, " "))
+	local cmd, arg1, arg2, arg3 = string.match(msg, '([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*([^%s]+)')
 -- 	if debug then DEBUG(ME.addonShortName, cmd, arg1, arg2, arg3) end
 	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", arg1)
 	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", arg1)
