@@ -65,10 +65,10 @@ function ME.HasRights(command)
 end
 
 function ME.GetPartyMemberInfo(uid, index)
-	local name 		= UnitName(uid)
+	local name = UnitName(uid)
 	if name and name~="" then
-		ME.players				= ME.players or {}
-		ME.players[name]	= ME.players[name] or {name = name, uid = uid}
+		ME.players								= ME.players or {}
+		ME.players[name]					= ME.players[name] or {name = name}
 		ME.players[name].pClass,	ME.players[name].sClass		= UnitClassToken(uid)
 		ME.players[name].pLevel,	ME.players[name].sLevel		= UnitLevel(uid)
 	_,ME.players[name].online,	ME.players[name].isAssist	= GetRaidMember(index or 1)
@@ -76,6 +76,8 @@ function ME.GetPartyMemberInfo(uid, index)
 		ME.players[name].isLead 	= ME.utils.toboolean(UnitIsRaidLeader(uid))
 		ME.players[name].isTank		= ME.utils.toboolean(UnitIsRaidMainTank(uid))
 		ME.players[name].isAttack	= ME.utils.toboolean(UnitIsRaidMainAttacker(uid))
+		ME.players[name].inRaid		= true
+		ME.players[name].uid			= uid
 		ME.players[name].hasTLRT	= ME.players[name].hasTLRT or false
 		return ME.players[name]
 	end
@@ -118,22 +120,25 @@ end
 
 function ME.GiveLead(_, _, user)
 	if UnitIsRaidLeader("player") then
-		local list = ME.FilterMemberList("name", "uid")
-		PromoteToPartyLeader(list[user].uid)
-		return true
+		local list = ME.FilterMemberList("name", nil)
+		if list[user] and list[user].inRaid and list[user].online then
+			PromoteToPartyLeader(list[user].uid)
+			ME.utils.Print(ME.addonName, "gives lead to", user)
+			return true
+		end
 	end
 	return false
 end
 
 function ME.CheckLeader()
-	-- TODO think about ist
+	-- TODO think about it
 end
 
 function ME.CheckAssist()
 	if not UnitIsRaidLeader("player") or not ME.settings.autoAssist then return end
 	if debug then DEBUG(ME.addonShortName, "CheckAssist") end
 	for uid,member in pairs(ME.members) do
-		if name~=UnitName("player") and not member.isAssist and not member.isLead and member.online then
+		if member.name~=UnitName("player") and member.inRaid and not member.isAssist and not member.isLead and member.online then
 			ME.utils.Print(ME.addonName, "gives assist to", member.name)
 			SwithRaidAssistant(member.index, true)	-- misspelling correct
 		end
@@ -380,8 +385,10 @@ function ME.VARIABLES_LOADED(...)
 	ME.RegisterEvent(ME.addonShortName, "LOADING_END")
 	ME.RegisterEvent(ME.addonShortName, "SAVE_VARIABLES")
 	ME.RegisterEvent(ME.addonShortName, "CHAT_MSG_PARTY")
+	ME.RegisterEvent(ME.addonShortName, "CHAT_MSG_RAID")
 	ME.RegisterEvent(ME.addonShortName, "PARTY_MEMBER_CHANGED")
 	ME.RegisterEvent(ME.addonShortName, "PARTY_LEADER_CHANGED")
+	ME.RegisterEvent(ME.addonShortName, "PB_RAIDINFO_REFRESH")
 	-- hook functions
 	ME.utils.Hook(_G, "SendChatMessage", ME.SendChatMessage)
 	_G.SendRaidMessage	= ME.SendRaidMessage
