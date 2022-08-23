@@ -159,6 +159,14 @@ function ME.Hook(funcRoot, funcName, newFunc)
 	return ME.GetOriginalFunction(funcRoot, funcName)
 end
 
+function ME.Unhook(funcRoot, funcName)
+	funcRoot[funcName] = ME.GetOriginalFunction(funcRoot, funcName)
+	funcRoot.TLRTHookedFunctions = funcRoot.TLRTHookedFunctions or {}
+	if funcRoot.TLRTHookedFunctions[funcName] then
+		funcRoot.TLRTHookedFunctions[funcName] = nil
+	end
+end
+
 function ME.GetOriginalFunction(funcRoot, funcName)
 	return funcRoot.TLRTHookedFunctions and funcRoot.TLRTHookedFunctions[funcName] or funcRoot[funcName]
 end

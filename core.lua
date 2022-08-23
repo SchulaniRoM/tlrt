@@ -16,6 +16,7 @@ local ME = {
 	addonURL				= "https://github.com/SchulaniRoM/tlrt",
 	profileName			= "tlrt_settings",
 	isActive				= false,
+	isLoaded				= false,
 	-- default settings
 	defaults = {
 		enabled					= true,
@@ -32,10 +33,12 @@ local ME = {
 		[9]	= {token = "GIVELEAD",	rights = "member",	func = "GiveLead"},
 	},
 	funcHooks = {	-- number is the argument position of unitID. use {1,2} if more than one
-		TargetUnit			= 1,
-		FollowUnit			= 1,
-		FocusUnit				= 1,
-		CastSpellByName = 2,
+-- 		TargetUnit = 1, FollowUnit = 1, FocusUnit = 1, AssistUnit = 1, CastSpellByName = 2, InviteRideMount = 1,
+-- 		UnitBuff = 1, UnitBuffInfo = 1, UnitBuffLeftTime = 1, UnitCastingTime = 1, UnitChangeHealth = 1, UnitClass = 1, UnitClassToken = 1, 	UnitDebuff = 1,
+-- 		UnitDebuffLeftTime = 1, UnitExists = 1, UnitHealth = 1, UnitInParty = 1, UnitInRaid = 1, UnitIsDeadOrGhost = 1, UnitIsPlayer = 1, UnitIsRaidLeader = 1,
+-- 		UnitLevel = 1, UnitMana = 1, UnitManaType = 1, UnitMaster = 1, UnitMaxHealth = 1, UnitMaxMana = 1, UnitMaxSkill = 1, UnitName = 1, UnitRace = 1, UnitSex = 1,
+-- 		UnitSkill = 1, UnitSkillType = 1,
+-- 		UnitCanAttack = {1,2}, UnitIsUnit = {1,2},
 	},
 	eventList				= {},
 	lastLeader			= nil,
@@ -136,7 +139,7 @@ end
 
 function ME.CheckAssist()
 	if not UnitIsRaidLeader("player") or not ME.settings.autoAssist then return end
-	if debug then DEBUG(ME.addonShortName, "CheckAssist") end
+	if debug==true then DEBUG(ME.addonShortName, "CheckAssist") end
 	for uid,member in pairs(ME.members) do
 		if member.name~=UnitName("player") and member.inRaid and not member.isAssist and not member.isLead and member.online then
 			ME.utils.Print(ME.addonName, "gives assist to", member.name)
@@ -161,7 +164,7 @@ function ME.UpdateParty(event, ...)
 			if member.isTank		then t = t + 1	ME.members["tank"..t] 	= member end
 			c = c + 1
 		end
-		if debug then DEBUG(ME.addonShortName, "UpdateParty", c, t, a, l) end
+		if debug==true then DEBUG(ME.addonShortName, "UpdateParty", c, t, a, l) end
 	end
 	ME.Activate(ME.utils.tableSize(tbl))
 	if ME.isActive then
@@ -175,8 +178,10 @@ function ME.Activate(state)
 	if state~=ME.isActive then
 		ME.isActive = state
 		if ME.isActive then
+			ME.HookUidFunctions()
 			ME.utils.Print(ME.addonName, C_GREEN..ME.lang.ON.."|r")
 		else
+			ME.UnhookUidFunctions()
 			ME.utils.Print(ME.addonName, C_RED..ME.lang.OFF.."|r")
 			ME.members	= {}
 			ME.taskList	= {}
@@ -187,7 +192,7 @@ end
 -- available keys: name, uid, group, index, pClass, pLevel, sClass, sLevel, isOnline, isLead, isAssist, isTank, isAttack
 function ME.FilterMemberList(indexKey, valueKey)
 	local list = {}
-	if ME.isLoaded and ME.isActive then
+	if ME.isLoaded==true and ME.isActive==true then
 		for uid,member in pairs(ME.members) do
 			local data = valueKey and (member[valueKey] or valueKey) or member
 			if indexKey=="uid" then
@@ -203,7 +208,7 @@ end
 -- find and handle TLRT related messages
 
 function ME.SendRaidMessage(command, members, text)					-- member: true for all or {"name1", "name5", "name3"...}
-	if not ME.isLoaded or not ME.isActive then return end
+	if ME.isLoaded~=true or ME.isActive~=true then return end
 	if not ME.HasRights(command) then return ME.utils.Print(ME.lang.NORIGHTS) end
 	local cmdCode, memCode = nil, "3F3F3F3F3F3F"
 	for i=0,math.min(255,#ME.commands) do
@@ -234,7 +239,7 @@ function ME.SendRaidMessage(command, members, text)					-- member: true for all 
 		end
 	end
 	local msg = sprintf("|H%s:%s%s|h|h%s", ME.addonShortName, cmdCode, memCode, text or "")
-	if debug then DEBUG(ME.addonShortName, "SendRaidMessage", command, msg:sub(2)) end
+	if debug==true then DEBUG(ME.addonShortName, "SendRaidMessage", command, msg:sub(2)) end
 	ME.utils.GetOriginalFunction(_G, "SendChatMessage")(msg, "party")
 end
 
@@ -249,14 +254,14 @@ function ME.ShowMessage(command, members, user, data, text)
 end
 
 function ME.ParseMessage(msg, user)
-	if not ME.isLoaded or not ME.isActive or not msg or not user then return msg end
+	if ME.isLoaded~=true or ME.isActive~=true or not msg or not user then return msg end
 	if msg:match("|H"..ME.addonShortName..":%w+|h|h") then
 		local cmd, data, rest	= msg:match("|H"..ME.addonShortName..":(%x%x)(%w*)|h|h(.*)$")
 		local _,user,_	= ParseHyperlink(user)
 		if cmd then					-- its a tlrt message
 			if cmd=="00" then	-- its a tlrt sync (any non command) message
 				local version = data and tonumber(data, 16)/1000 or 0
-				if debug then DEBUG(ME.addonShortName, "SYNC", user, data, MoneyNormalization(version*1000), rest) end
+				if debug==true then DEBUG(ME.addonShortName, "SYNC", user, data, MoneyNormalization(version*1000), rest) end
 				ME.players[user].hasTLRT = true
 				if version>ME.addonVersion and not ME.newVersionReported then
 					ME.utils.Print(ME.addonName, "newer version", MoneyNormalization(version*1000), "available.\ndownload at", ME.addonURL)
@@ -267,7 +272,7 @@ function ME.ParseMessage(msg, user)
 				local text = msg:gsub("|H"..ME.addonShortName..":"..cmd..g1..g2..g3..g4..g5..g6..data.."|h|h", "")
 				local groups	= {tonumber(g1,16), tonumber(g2,16), tonumber(g3,16), tonumber(g4,16), tonumber(g5,16), tonumber(g6,16)}
 				local members, tmp	= {}, ME.FilterMemberList("index", "name")
-				if debug then DEBUG(ME.addonShortName, "parseresult", cmd, g1, g2, g3, g4, g5, g6, info, text) end
+				if debug==true then DEBUG(ME.addonShortName, "parseresult", cmd, g1, g2, g3, g4, g5, g6, info, text) end
 				cmd	= ME.commands[tonumber(cmd,16)]
 				for g=1,6 do
 					local pow = 1
@@ -278,7 +283,7 @@ function ME.ParseMessage(msg, user)
 						pow = pow * 2
 					end
 				end
-				if debug then DEBUG(ME.addonShortName, "members", ME.utils.join(members, ",")) end
+				if debug==true then DEBUG(ME.addonShortName, "members", ME.utils.join(members, ",")) end
 				if cmd.func and ME[cmd.func] and ME.isLoaded and ME.isActive then
 					local success, errMsg = pcall(ME[cmd.func], cmd, members, user, data, text)
 					assert(success, errMsg)
@@ -302,7 +307,7 @@ function ME.ParseSendMessage(text)
 end
 
 function ME.SendChatMessage(msg, chat, arg1, arg2)
-	if chat:lower()=="party" and ME.isLoaded and ME.isActive then
+	if chat:lower()=="party" and ME.isLoaded==true and ME.isActive==true then
 		local text, cmd = ME.ParseSendMessage(msg)
 		ME.SendRaidMessage(cmd, true, text)
 		return false
@@ -313,31 +318,56 @@ end
 
 -- handle "new" uid
 
-function ME.UnitID(uid)
-	if type(uid)=="string" and uid~="" and ME.isLoaded and ME.isActive then
-		local id		= uid:lower()
-		local list	= ME.FilterMemberList("uid", "uid")
-		uid = uid:gsub("^(atta?c?k?e?r?)", "attack"):gsub("^assista?n?t?", "assist"):gsub("^leade?r?", "lead")
-		if string.find(id, "^party")	then uid = uid:gsub("party", "raid") end
-		if string.find(id, "^tank") 	then uid = uid:gsub("^(tank%d+)", list) end
-		if string.find(id, "^attack") then uid = uid:gsub("^(attack%d+)", list) end
-		if string.find(id, "^assist") then uid = uid:gsub("^(assist%d+)", list) end
-		if string.find(id, "^lead") 	then uid = uid:gsub("^(lead)", list) end
+local function CreateHarcodedList()
+	-- hard code (some) old ids for faster processing
+	local list = {mouseover = true}
+	local tmp, i, uid = {"player", "target"}
+	for i=1,6  do table.insert(tmp, "party"..i) end
+	for i=1,12 do table.insert(tmp, "focus"..i) end
+	for i=1,36 do table.insert(tmp, "raid"..i) end
+	for _,uid in pairs(tmp) do
+		list[uid] = true
+		list[uid.."pet"] = true
+		list[uid.."target"] = true
 	end
+	return list
+end
+
+function ME.UnitID(uid)
+	if uid==nil or uid=="" or type(uid)~="string" or ME.isLoaded~=true or ME.isActive~=true then return uid end
+	ME.UIDs = ME.UIDs or CreateHarcodedList()
+	if ME.UIDs[uid]==true then return uid end
+
+	SendSystemChat("new uid used for "..uid)
+	local id		= uid:lower()
+	local list	= ME.FilterMemberList("uid", "uid")
+-- 	uid = uid:gsub("^(atta?c?k?e?r?)", "attack"):gsub("^assista?n?t?", "assist"):gsub("^leade?r?", "lead")
+	if string.find(id, "^tank") 	then return uid:gsub("^(tank%d+)", list) end
+	if string.find(id, "^attack") then return uid:gsub("^(attack%d+)", list) end
+	if string.find(id, "^assist") then return uid:gsub("^(assist%d+)", list) end
+	if string.find(id, "^lead") 	then return uid:gsub("^(lead)", list) end
 	return uid
 end
 
 function ME.HookUidFunctions()
 	for func,argPos in pairs(ME.funcHooks) do
 		ME.utils.Hook(_G, func, function(...)
-			local args, argPos = {...}, type(argPos)=="number" and {argPos} or argPos
-			for _,pos in pairs(argPos) do
-				local newID = ME.UnitID(args[pos])
-				if debug and newID~=args[pos] then DEBUG(ME.addonShortName, func, args[pos], "-->", newID) end
-				args[pos]	= newID
+			local args, argPos = #{...}>0 and {...} or {}, type(argPos)=="number" and {argPos} or argPos
+			if ME.isLoaded==true and ME.isActive==true then
+				for _,pos in pairs(argPos) do
+					local newID = ME.UnitID(args[pos])
+					if debug==true and newID~=args[pos] then DEBUG(ME.addonShortName, func, args[pos], "-->", newID) end
+					args[pos]	= newID
+				end
 			end
 			ME.utils.GetOriginalFunction(_G, func)(unpack(args))
 		end)
+	end
+end
+
+function ME.UnhookUidFunctions()
+	for func,argPos in pairs(ME.funcHooks) do
+		ME.utils.Unhook(_G, func)
 	end
 end
 
@@ -361,7 +391,7 @@ function ME.VARIABLES_LOADED(...)
 	-- load debug
 	success, DEBUG = pcall(dofile, sprintf("%s/debug.lua", ME.addonPath))
 	debug = debug and success
-	if debug then DEBUG(ME.addonShortName, "debug mode enabled...") end
+	if debug==true then DEBUG(ME.addonShortName, "debug mode enabled...") end
 	-- load utils
 	file = sprintf("%s/utils.lua", ME.addonPath)
 	success, errMsg	= pcall(loadfile, file)		assert(success, errMsg)
@@ -392,7 +422,7 @@ function ME.VARIABLES_LOADED(...)
 	-- hook functions
 	ME.utils.Hook(_G, "SendChatMessage", ME.SendChatMessage)
 	_G.SendRaidMessage	= ME.SendRaidMessage
-	ME.HookUidFunctions()
+	_G.SlashCmdList["TLRT"]	= ME.SlashCommand
 	-- startup finished
 	ME.isLoaded = true
 	ME.utils.Print(ME.addonName, ME.addonVersion, ME.lang.LOADED)
@@ -521,7 +551,7 @@ function ME.CancelTask(obj)
 end
 
 function ME.UpdateTask(obj, typ)
-	if debug then DEBUG(ME.addonShortName, typ, "task", obj.name, DEBUG.ListTable(ME.utils.VarFunc(obj.members))) end
+	if debug==true then DEBUG(ME.addonShortName, typ, "task", obj.name, DEBUG.ListTable(ME.utils.VarFunc(obj.members))) end
 	local msg
 	if typ and typ~="update" then
 		msg = ME.utils.VarFunc(obj["on_"..typ])
@@ -538,10 +568,10 @@ end
 
 -- slash command handler
 
-function _G.SlashCmdList.TLRT(editBox, msg)
+function ME.SlashCommand(editBox, msg)
 -- 	local cmd, arg1, arg2, arg3 = unpack(ME.utils.split(msg, " "))
 	local cmd, arg1, arg2, arg3 = string.match(msg, '([^%s]+)%s*([^%s]+)%s*([^%s]+)%s*([^%s]+)')
--- 	if debug then DEBUG(ME.addonShortName, cmd, arg1, arg2, arg3) end
+-- 	if debug==true then DEBUG(ME.addonShortName, cmd, arg1, arg2, arg3) end
 	if cmd=="sound" or cmd=="usesound" then															return ME.SetSettings("useSound", arg1)
 	elseif cmd=="assist" or cmd=="autoassist" then											return ME.SetSettings("autoAssist", arg1)
 	elseif cmd=="on" or cmd=="true" or cmd=="off" or cmd=="false" then	return ME.SetSettings("enabled", cmd)
@@ -574,7 +604,7 @@ function _G.SlashCmdList.TLRT(editBox, msg)
 			local file = sprintf("%s/scripts/%s.lua", ME.addonPath, cmd)
 			local success, errMsg	= pcall(loadfile, file)
 			if success then
-				if debug then DEBUG(ME.addonShortName, "loading module", cmd) end
+				if debug==true then DEBUG(ME.addonShortName, "loading module", cmd) end
 				ME.modules[cmd] = dofile(file)
 				if ME.modules[cmd].Init then ME.modules[cmd].Init() end
 			end
